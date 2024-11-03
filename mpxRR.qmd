@@ -8,7 +8,7 @@ editor: visual
 library(tidyverse)
 library(boot)
 
-natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
+natsal=read.delim("UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 
 #natsalCOVIDwave2=read.delim("../UKDA-8865-tab/tab/natsal_covid_wave_2_archive.tab")
 
