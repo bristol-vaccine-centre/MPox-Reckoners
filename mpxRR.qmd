@@ -7,7 +7,8 @@ editor: visual
 ```{r}
 library(tidyverse)
 library(boot)
-library(tidyverse)
+library(cowplot)
+
 
 natsal=read.delim("UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 
@@ -43,7 +44,6 @@ summary(natsal$dage)
 ```
 
 ```{r}
-library(cowplot)
 natsal %>%
   filter(het1yr<900) %>%
   group_by(dage) %>%
@@ -486,6 +486,7 @@ CalcRNumbers = function(contacts = MSM,
 
 
 ```
+
 ```{r}
 #refactor the above code. DO NOT TOUCH ABOVE
 
@@ -498,7 +499,6 @@ CalcRNumbersVax2 = function(contacts = MSM,
   
   attackrate = c(SameSexSAR,HeteroSAR,HouseholdSAR) 
   # contacts holds the NATSAL3 datasets 
-  VE=0.8
   MSM = contacts # this can be all types of contact. 
   #mult1=1 # what is this? it's set to 1 and doesn't do anything.
   VaxCover = seq(0,100,2) # generate sequence to model over vaccine coverage 
@@ -545,9 +545,9 @@ CalcRNumbersVax2 = function(contacts = MSM,
 #    MSM |> 
 #      slice_sample(n=Number2Vax,replace=F,.preserve = TRUE) # we don't want slice because it removes the other rows. we want an equivalent that only modifies VE (indR) for selected rows. 
     
-```    
+```
 
-```{r} 
+```{r}
     for(rx in 1:numreps) # number of repetitions 
     {
       
@@ -617,6 +617,7 @@ CalcRNumbersVax2 = function(contacts = MSM,
 
 
 ```
+
 # Plot vaccine reckoner
 
 ```{r}
@@ -652,7 +653,6 @@ GGPlotVaxRibbons = function(dataDF = RMSMCIIb.df){
 
 ```
 
-
 ```{r}
 # Do the calculations
 
@@ -665,7 +665,6 @@ RMSMCI20 = CalcRNumbers(HouseholdSAR = 0.2,numreps=50)
 RMSMCIb50 = CalcRNumbers(HouseholdSAR = 0.5,numreps = 50)
 
 ```
-
 
 ```{r}
 library(patchwork)
@@ -715,7 +714,6 @@ HHSARVAXTHRESHOLD |>
   geom_ribbon(aes(ymin = Lower,ymax=Upper,fill=Type))+
   facet_grid(~value)
 ```
-
 
 ```{r}
 #now do it for vax thresholds
