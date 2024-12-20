@@ -1,0 +1,356 @@
+---
+title: "Proportionate Mixing Vaccination"
+format: html
+editor: visual
+---
+
+## Setup
+
+```{r}
+#| echo: false
+
+library(tidyverse)
+library(boot)
+library(cowplot)
+
+natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
+natsal %>%
+  select(sin2,total_wt,dage,hhsize,het1yr,sam1yr,sam5yrs) -> RRdata
+
+
+attackrate = c(0.12,0.12,0.013) #from Packer et al. 
+mult1=1
+myinterval=0.95
+
+
+RRdata %>%
+  filter(sam1yr <100 & het1yr<100 & hhsize<100) %>%
+  mutate(vaccineeffect = 1) %>%
+  mutate(indR = vaccineeffect*attackrate[1]*sam1yr + 
+           vaccineeffect*attackrate[2]*het1yr + 
+           vaccineeffect*attackrate[3]*hhsize) -> RRdata
+
+RRdata %>%
+  filter(sam5yrs>0) -> MSM
+
+myweightedmean=function(DD,ix)
+{
+  return(sum(DD[ix,2]*DD[ix,1]^2)/sum(DD[ix,1]*DD[ix,2]))
+}
+
+myweightedmeanvac=function(DD,ix)
+{
+  return(sum(DD[ix,1]*DD[ix,2])/sum(DD[ix,1]*DD[ix,3]))
+}
+
+```
+
+## Figure 1
+
+```{r}
+#| echo: false
+#| eval: false
+# buildup to figure 1
+
+RRdata %>%
+  mutate(PropSameSex=sam1yr/(sam1yr + het1yr))%>% # some NANs for people with no sexual contacts 
+  mutate(PropSameSex = ifelse(is.na(PropSameSex),0,PropSameSex)) %>%
+  mutate(MoreThanHalf= ifelse(PropSameSex<0.5,'Mainly opposite sex contacts','Mainly same sex contacts'))%>% 
+  #mutate(MoreThanHalf = ifelse(NA,"Household contacts only",MoreThanHalf)) %>%
+  ggplot(aes(x=indR,fill = MoreThanHalf)) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.05,position= position_dodge()) + 
+  xlab('Individual reproduction numbers') + 
+  #scale_x_continuous(trans='sqrt') + 
+  scale_x_log10()+
+  ylab('Density')+
+  theme_minimal_grid()
+
+RRdata %>%
+  mutate(PropSameSex=sam1yr/(sam1yr + het1yr))%>% # some NANs for people with no sexual contacts 
+  mutate(PropSameSex = ifelse((sam1yr + het1yr)==0,-1,PropSameSex)) %>%
+  mutate(MoreThanHalf= ifelse(PropSameSex==-1,"Household contacts only",ifelse(PropSameSex<0.5,'Mainly opposite sex contacts','Mainly same sex contacts')))%>%
+  ggplot(aes(x=indR,fill = MoreThanHalf)) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.05,position= position_dodge()) + 
+  geom_vline(xintercept = 1) + 
+  xlab('Individual reproduction numbers') + 
+  #scale_x_continuous(trans='sqrt') + 
+  scale_x_log10()+
+  ylab('Density')+
+  theme_minimal_grid() + 
+  theme(legend.justification=c(0,0), legend.position=c(0.73,0.85),
+        legend.title=element_blank(),legend.background =  element_rect(fill="white", size=2, linetype="dotted"))
+#theme(legend.position = "top",legend.title=element_blank()) 
+
+
+```
+
+### Figure 1 Clade IIb
+
+```{r}
+
+RRdata %>%
+  mutate(PropSameSex=sam1yr/(sam1yr + het1yr))%>% # some NANs for people with no sexual contacts 
+  mutate(PropSameSex = ifelse((sam1yr + het1yr)==0,-1,PropSameSex)) %>%
+  mutate(MoreThanHalf= ifelse(PropSameSex==-1,"Household contacts only",
+                              ifelse(PropSameSex<0.5,'Mainly opposite sex contacts',
+                                     'Mainly same sex contacts')))%>%
+  mutate(MoreThanHalf= case_when((sam1yr==0 & het1yr==0) ~ "Household contacts only",
+                                 (sam1yr>0 & het1yr==0) ~ "Same-sex contacts only",
+                                 (sam1yr==0 & het1yr>0) ~ "Opposite-sex contacts only",
+                                 (sam1yr>0 & het1yr>0 & PropSameSex<0.5) ~ 'Mainly opposite-sex contacts',
+                                 (sam1yr>0 & het1yr>0 & PropSameSex>=0.5) ~ 'Mainly same-sex contacts') )%>%
+  mutate(MoreThanHalf = fct_reorder(MoreThanHalf,indR)) %>%
+  ggplot(aes(x=indR,fill = MoreThanHalf)) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.05,position= position_dodge()) + 
+  geom_vline(xintercept = 1) + 
+  xlab('Individual reproduction numbers') + 
+  #scale_x_continuous(trans='sqrt') + 
+  scale_x_log10()+
+  ylab('Density')+
+  facet_grid(MoreThanHalf~.,labeller = label_wrap_gen(width=9))+
+  theme_bw() + 
+  theme(legend.position="none",strip.background = element_rect(
+    color="black", fill=c("lightgray"), size=1, linetype="solid"),
+    strip.text.y = element_text(size = 10))
+```
+
+### Figure 1: Clade 1B
+
+Household attack rate x10.
+
+```{r}
+
+attackrate = c(0.12,0.12,0.12) #from Packer et al; with household attack rate up x10. 
+
+
+RRdata %>%
+  filter(sam1yr <100 & het1yr<100 & hhsize<100) %>%
+  mutate(vaccineeffect = 1) %>%
+  mutate(indR = vaccineeffect*attackrate[1]*sam1yr + vaccineeffect*attackrate[2]*het1yr + vaccineeffect*attackrate[3]*hhsize) -> RRdata
+
+
+RRdata %>%
+  mutate(PropSameSex=sam1yr/(sam1yr + het1yr))%>% # some NANs for people with no sexual contacts 
+  mutate(PropSameSex = ifelse((sam1yr + het1yr)==0,-1,PropSameSex)) %>%
+  mutate(MoreThanHalf= ifelse(PropSameSex==-1,"Household contacts only",
+                              ifelse(PropSameSex<0.5,'Mainly opposite sex contacts',
+                                     'Mainly same sex contacts')))%>%
+  mutate(MoreThanHalf= case_when((sam1yr==0 & het1yr==0) ~ "Household contacts only",
+                                 (sam1yr>0 & het1yr==0) ~ "Same-sex contacts only",
+                                 (sam1yr==0 & het1yr>0) ~ "Opposite-sex contacts only",
+                                 (sam1yr>0 & het1yr>0 & PropSameSex<0.5) ~ 'Mainly opposite-sex contacts',
+                                 (sam1yr>0 & het1yr>0 & PropSameSex>=0.5) ~ 'Mainly same-sex contacts') )%>%
+  mutate(MoreThanHalf = fct_reorder(MoreThanHalf,indR)) %>%
+  ggplot(aes(x=indR,fill = MoreThanHalf)) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.05,position= position_dodge()) + 
+  geom_vline(xintercept = 1) + 
+  xlab('Individual reproduction numbers') + 
+  #scale_x_continuous(trans='sqrt') + 
+  scale_x_log10()+
+  ylab('Density')+
+  facet_grid(MoreThanHalf~.,labeller = label_wrap_gen(width=9))+
+  theme_bw() + 
+  theme(legend.position="none",strip.background = element_rect(
+    color="black", fill=c("lightgray"), size=1, linetype="solid"),
+    strip.text.y = element_text(size = 10))
+
+
+```
+
+### New vaccination calculations with proportionate mixing
+
+```{r}
+#RRdata %>%
+#  filter(sam5yrs>0) %>% 
+#  mutate(totalcontacts = het1yr+sam1yr) %>% 
+#  mutate(propsame = sam1yr/totalcontacts)->MSM
+
+
+natsal %>%
+  filter(sam5yrs>0) %>% 
+  mutate(totalcontacts = het1yr+sam1yr) %>% 
+  filter(sam1yr <100 & het1yr<100 & hhsize<100)  |>
+  mutate(propsame = sam1yr/totalcontacts)->MSM
+
+attackrate = c(0.12,0.12,0.12) #from Packer et al; with household attack rate up x10. 
+
+
+
+VI = 0.3
+VT = 0.0
+
+CalculateIndR <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
+{
+  contacts |> 
+    mutate(probvac = probvac1) |> 
+    mutate(Rvac = (1-VT)*( (1-probvac) + probvac*(1-VI))*
+                          (attackrate[1]*sam1yr + 
+                           attackrate[2]*het1yr + 
+                           attackrate[3]*hhsize)) |> 
+    mutate(Runvac = ((1-probvac) + probvac*(1-VI))*
+                      (attackrate[1]*sam1yr + 
+                       attackrate[2]*het1yr + 
+                       attackrate[3]*hhsize)) |> 
+    mutate(indR = probvac*Rvac + (1-probvac)*Runvac) |> 
+    mutate(indRsquared = probvac*Rvac*Rvac + (1-probvac)*Runvac*Runvac) -> tmp
+  return(tmp)
+}
+
+
+CalcPopRvacRandom <- function(contacts, 
+                              probvac, 
+                              VI, 
+                              VT,
+                              bootRepeats = 1000) 
+{
+  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+  rindvac = cbind(MSM$total_wt,MSM$indRsquared,MSM$indR)
+  myboot = boot(rindvac,statistic=myweightedmeanvac,R=bootRepeats)
+  tmp = tibble(Mean = mean(myboot$t),
+               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
+               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
+
+  return(tmp)
+}
+
+CalcPopRvacTargetted <- function(contacts=MSM, 
+                                 PropVac, 
+                                 VI, 
+                                 VT,
+                                 bootRepeats = 1000) 
+{
+  #contacts = MSM
+#  PropVac = 0.9
+  N=sum(contacts$total_wt) #total number of people (we want i/100 to be vaccinated)
+  num2vac = N*PropVac
+  O1=order(contacts$totalcontacts,decreasing = TRUE)
+  CS1=cumsum(contacts$total_wt[O1])
+  Vthreshold = min(which(CS1>=num2vac))
+  probvac1=rep(0,length(O1))
+  probvac1[O1[1:Vthreshold]] = 1
+  
+  contacts$targetprob <- probvac1
+#  VT = 0.99
+#  VT = 0.4
+  MSM = CalculateIndR(contacts=contacts, probvac1=contacts$targetprob, VI = VI, VT = VT)
+  rindvac = cbind(MSM$total_wt,MSM$indRsquared,MSM$indR)
+#  mean(MSM$indR)
+#  mean(MSM$indRsquared)
+  myboot = boot(rindvac,statistic=myweightedmeanvac,R=bootRepeats)
+  tmp = tibble(Mean = mean(myboot$t),
+               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
+               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
+
+  return(tmp)
+}
+
+
+#deltaX = seq(100,0,-5)
+#RpopMSM_target=matrix(NA,nrow=length(deltaX),ncol=3)
+#RpopMSM_random=matrix(NA,nrow=length(deltaX),ncol=3)
+
+#j=1
+#for(i in deltaX)# loop over proportion vaccinated
+
+  
+VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
+
+VaxPropDF|>
+  mutate(tmp =  map(ProportionVaccinated/100,
+                    ~CalcPopRvacRandom(probvac=.x,VI = 0.8))) |> 
+  unnest(tmp) |> 
+  mutate(Type = "Random")->VaxPropPopRRandom
+  
+
+VaxPropDF|>
+  mutate(tmp =  map(ProportionVaccinated/100,
+                    ~CalcPopRvacTargetted(PropVac=.x,VI = 0.8))) |> 
+  unnest(tmp) |> 
+  mutate(Type = "Targetted")->VaxPropPopRTargetted
+ 
+bind_rows(VaxPropPopRRandom,VaxPropPopRTargetted)|> 
+  ggplot(aes(x = ProportionVaccinated))+
+  geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4)
+
+
+
+```
+
+So that works for individual VI, VT. Now to write wrapper functions around VI and VT.
+
+```{r}
+
+GenerateRibbonsVInfectionVTransmission <- function(VI, VT){
+  VaxPropDF = as_tibble(seq(0,100,1))|>rename(ProportionVaccinated = value)
+  
+  VaxPropDF|>
+    mutate(tmp =  map(ProportionVaccinated/100,
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
+    unnest(tmp) |> 
+    mutate(Type = "Random") |> 
+    mutate(VI = VI,VT = VT)->VaxPropPopRRandom
+  
+  VaxPropDF|>
+    mutate(tmp =  map(ProportionVaccinated/100,
+                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
+    unnest(tmp) |> 
+    mutate(Type = "Targetted") |> 
+    mutate(VI = VI, VT = VT)->VaxPropPopRTargetted
+ 
+  return(bind_rows(VaxPropPopRRandom,VaxPropPopRTargetted))
+}
+
+
+
+GenerateRibbonsVInfectionVTransmission(VI = 0.4, VT = 1)->VIVTLoop
+
+VIVTLoop |> 
+  ggplot(aes(x = ProportionVaccinated))+
+  geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4)
+
+#works
+
+```
+
+```{r}
+# without parallelising
+#expand_grid(VI = seq(0.0,1,0.2),VT = seq(0.0,1,0.2))
+
+expand_grid(VI = c(0.0,0.1,0.4,0.7,0.9,1),VT = c(0.0,0.1,0.4,0.7,0.9,1)) |> 
+  mutate(tmp = map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y))) |> 
+  unnest() ->RibbonsVIVT
+
+
+
+RibbonsVIVT |> 
+  ggplot(aes(x = ProportionVaccinated))+
+  geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4) +
+  geom_hline(yintercept = 1)+
+  facet_grid(VI~VT,labeller = 'label_both')
+
+```
+
+```{r}
+# parallelising. 
+
+library(purrr)
+library(furrr)
+
+plan(multisession, workers = 10)
+options = furrr_options(seed=TRUE)
+
+expand_grid(VI = c(0.0,0.1,0.4,0.90,0.99),VT = c(0.0,0.1,0.4,0.7,0.90,0.99)) |> 
+  mutate(tmp = future_map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y),.options = options)) |> 
+  unnest() ->RibbonsVIVT
+
+RibbonsVIVT |> 
+  ggplot(aes(x = ProportionVaccinated))+
+  geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4) +
+  geom_hline(yintercept = 1)+
+  facet_grid(VI~VT,labeller = 'label_both')
+
+```
+
+```{r}
+
+```
