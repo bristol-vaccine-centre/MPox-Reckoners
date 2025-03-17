@@ -176,10 +176,10 @@ attackrate = c(0.12,0.12,0.12) #from Packer et al; with household attack rate up
 
 
 
-VI = 0.3
+VI = 0.3 # testing
 VT = 0.0
 
-CalculateIndR <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
+CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
 {
   contacts |> 
     mutate(probvac = probvac1) |> 
@@ -196,8 +196,38 @@ CalculateIndR <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
   return(tmp)
 }
 
+CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
+{
+  #if(!is.null(probvac1)){MSM$probvac=probvac1}
+  
+  MSM %>%
 
-CalcPopRvacRandom <- function(contacts, 
+    #mutate(probvac = probvac1) %>%
+    #mutate(degree = sam1yr + het1yr + hhsize) %>%
+    #mutate(degreedenom = sum(total_wt*degree)) %>%
+    #mutate(ci = total_wt*degree/degreedenom) %>%
+    # mutate(wi_vac = probvac*total_wt) %>%
+    # mutate(wi_unvac = (1-probvac)*total_wt) %>%
+    
+    mutate(wi_vac = probvac) %>%
+    mutate(wi_unvac = (1-probvac)) %>%
+    mutate(ci_vac = (1-VI)*ci) %>%
+    mutate(ci_unvac = ci) %>%
+    mutate(totalAR = attackrate[1]*sam1yr + attackrate[2]*het1yr + attackrate[3]*hhsize) %>%
+    mutate(Ri_vac = (1-VT)*totalAR) %>%
+    mutate(Ri_unvac = totalAR)%>%
+    mutate(Rsquared = Ri_unvac*ci_unvac)%>%
+    mutate(Rsquared2 = Ri_vac*ci_vac)-> tmp
+  return(tmp)
+}
+
+
+
+
+
+
+
+CalcPopRvacRandom_Old <- function(contacts, 
                               probvac, 
                               VI, 
                               VT,
@@ -213,6 +243,24 @@ CalcPopRvacRandom <- function(contacts,
   return(tmp)
 }
 
+CalcPopRvacRandom <- function(contacts, 
+                              probvac, 
+                              VI, 
+                              VT,
+                              bootRepeats = 1000) 
+{
+  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+  rindvac=cbind(MSM$Rsquared2,MSM$wi_vac)
+  rindunvac = cbind(MSM$Rsquared,MSM$wi_unvac)
+  rind = rbind(rindvac,rindunvac)
+  myboot=boot(rind,statistic=myweightedmeanvac,R=bootRepeats)
+  tmp = tibble(Mean = mean(myboot$t),
+               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
+               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
+  return(tmp)
+}
+
+
 CalcPopRvacTargetted <- function(contacts=MSM, 
                                  PropVac, 
                                  VI, 
@@ -227,7 +275,11 @@ CalcPopRvacTargetted <- function(contacts=MSM,
   CS1=cumsum(contacts$total_wt[O1])
   Vthreshold = min(which(CS1>=num2vac))
   probvac1=rep(0,length(O1))
-  probvac1[O1[1:Vthreshold]] = 1
+  probvac1[O1[1:Vthreshold]] = 1 
+  
+  
+  ###################### GOT TO HERE ##############
+  
   
   contacts$targetprob <- probvac1
 #  VT = 0.99
@@ -257,7 +309,7 @@ VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacRandom(probvac=.x,VI = 0.8))) |> 
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = 0.8))) |> 
   unnest(tmp) |> 
   mutate(Type = "Random")->VaxPropPopRRandom
   
@@ -302,7 +354,7 @@ GenerateRibbonsVInfectionVTransmission <- function(VI, VT){
 
 
 
-GenerateRibbonsVInfectionVTransmission(VI = 0.4, VT = 1)->VIVTLoop
+GenerateRibbonsVInfectionVTransmission(VI = 0, VT = 0.99)->VIVTLoop
 
 VIVTLoop |> 
   ggplot(aes(x = ProportionVaccinated))+

@@ -743,6 +743,7 @@ HHSAR|>
                           .progress = TRUE)) |>
     unnest(tmp)-> VaxPlotData
 ```
+
 ```{r}
 VaxPlotData |>
   ggplot(aes(x=HouseholdSAR,ymin=Lower,ymax=Upper,fill=Type))+
@@ -826,7 +827,6 @@ panel_plots_reducedVE
 
 
 ```
-
 
 ```{r}
 
