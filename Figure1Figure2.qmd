@@ -14,6 +14,7 @@ library(boot)
 library(cowplot)
 
 natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
+#natsal = read.delim("~/OneDrive - University of Bristol/Shared Documents/MPox/UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 natsal %>%
   select(sin2,total_wt,dage,hhsize,het1yr,sam1yr,sam5yrs) -> RRdata
 
@@ -40,7 +41,8 @@ myweightedmean=function(DD,ix)
 
 myweightedmeanvac=function(DD,ix)
 {
-  return(sum(DD[ix,1]*DD[ix,2])/sum(DD[ix,1]*DD[ix,3]))
+  #return(sum(DD[ix,1]*DD[ix,2])/sum(DD[ix,1]*DD[ix,3]))
+  return(sum(DD[ix,1]*DD[ix,2]))
 }
 
 ```
@@ -202,12 +204,12 @@ CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
   
   MSM %>%
 
-    #mutate(probvac = probvac1) %>%
-    #mutate(degree = sam1yr + het1yr + hhsize) %>%
-    #mutate(degreedenom = sum(total_wt*degree)) %>%
-    #mutate(ci = total_wt*degree/degreedenom) %>%
-    # mutate(wi_vac = probvac*total_wt) %>%
-    # mutate(wi_unvac = (1-probvac)*total_wt) %>%
+    mutate(probvac = probvac1) %>%
+    mutate(degree = sam1yr + het1yr + hhsize) %>%
+    mutate(degreedenom = sum(total_wt*degree)) %>%
+    mutate(ci = total_wt*degree/degreedenom) %>%
+    mutate(wi_vac = probvac*total_wt) %>%
+    mutate(wi_unvac = (1-probvac)*total_wt) %>%
     
     mutate(wi_vac = probvac) %>%
     mutate(wi_unvac = (1-probvac)) %>%
@@ -309,14 +311,14 @@ VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = 0.8))) |> 
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = 0.8, VT = 0.8))) |> 
   unnest(tmp) |> 
   mutate(Type = "Random")->VaxPropPopRRandom
   
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacTargetted(PropVac=.x,VI = 0.8))) |> 
+                    ~CalcPopRvacTargetted(PropVac=.x,VI = 0.8, VT = 0.8))) |> 
   unnest(tmp) |> 
   mutate(Type = "Targetted")->VaxPropPopRTargetted
  
