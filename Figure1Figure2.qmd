@@ -203,7 +203,6 @@ CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
   #if(!is.null(probvac1)){MSM$probvac=probvac1}
   
   MSM %>%
-
     mutate(probvac = probvac1) %>%
     mutate(degree = sam1yr + het1yr + hhsize) %>%
     mutate(degreedenom = sum(total_wt*degree)) %>%
@@ -229,21 +228,37 @@ CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
 
 
 
-CalcPopRvacRandom_Old <- function(contacts, 
-                              probvac, 
-                              VI, 
-                              VT,
-                              bootRepeats = 1000) 
+#CalcPopRvacRandom_Old <- function(contacts, 
+#                              probvac, 
+#                              VI, 
+#                              VT,
+#                              bootRepeats = 1000) 
+#{
+#  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+#  rindvac = cbind(MSM$total_wt,MSM$indRsquared,MSM$indR)
+#  myboot = boot(rindvac,statistic=myweightedmeanvac,R=bootRepeats)
+#  tmp = tibble(Mean = mean(myboot$t),
+#               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
+#               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
+##
+#
+#  return(tmp)
+#}
+
+
+
+CalcRvac <- function(MSM)
 {
-  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
-  rindvac = cbind(MSM$total_wt,MSM$indRsquared,MSM$indR)
-  myboot = boot(rindvac,statistic=myweightedmeanvac,R=bootRepeats)
+  rindvac=cbind(MSM$Rsquared2,MSM$wi_vac)
+  rindunvac = cbind(MSM$Rsquared,MSM$wi_unvac)
+  rind = rbind(rindvac,rindunvac)
+  myboot=boot(rind,statistic=myweightedmeanvac,R=1000)
   tmp = tibble(Mean = mean(myboot$t),
                Lower = quantile(myboot$t,0.025,na.rm = TRUE),
                Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
-
   return(tmp)
 }
+
 
 CalcPopRvacRandom <- function(contacts, 
                               probvac, 
@@ -252,16 +267,9 @@ CalcPopRvacRandom <- function(contacts,
                               bootRepeats = 1000) 
 {
   MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
-  rindvac=cbind(MSM$Rsquared2,MSM$wi_vac)
-  rindunvac = cbind(MSM$Rsquared,MSM$wi_unvac)
-  rind = rbind(rindvac,rindunvac)
-  myboot=boot(rind,statistic=myweightedmeanvac,R=bootRepeats)
-  tmp = tibble(Mean = mean(myboot$t),
-               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
-               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
+  tmp = CalcRvac(MSM)
   return(tmp)
 }
-
 
 CalcPopRvacTargetted <- function(contacts=MSM, 
                                  PropVac, 
@@ -276,25 +284,14 @@ CalcPopRvacTargetted <- function(contacts=MSM,
   O1=order(contacts$totalcontacts,decreasing = TRUE)
   CS1=cumsum(contacts$total_wt[O1])
   Vthreshold = min(which(CS1>=num2vac))
-  probvac1=rep(0,length(O1))
-  probvac1[O1[1:Vthreshold]] = 1 
+  probvac=rep(0,length(O1))
+  probvac[O1[1:Vthreshold]] = 1 
   
-  
-  ###################### GOT TO HERE ##############
-  
-  
-  contacts$targetprob <- probvac1
+  #contacts$targetprob <- probvac1
 #  VT = 0.99
 #  VT = 0.4
-  MSM = CalculateIndR(contacts=contacts, probvac1=contacts$targetprob, VI = VI, VT = VT)
-  rindvac = cbind(MSM$total_wt,MSM$indRsquared,MSM$indR)
-#  mean(MSM$indR)
-#  mean(MSM$indRsquared)
-  myboot = boot(rindvac,statistic=myweightedmeanvac,R=bootRepeats)
-  tmp = tibble(Mean = mean(myboot$t),
-               Lower = quantile(myboot$t,0.025,na.rm = TRUE),
-               Upper = quantile(myboot$t,0.975,na.rm = TRUE)) 
-
+  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+  tmp = CalcRvac(MSM)
   return(tmp)
 }
 
@@ -318,7 +315,7 @@ VaxPropDF|>
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacTargetted(PropVac=.x,VI = 0.8, VT = 0.8))) |> 
+                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM,VI = 0.8, VT = 0.8))) |> 
   unnest(tmp) |> 
   mutate(Type = "Targetted")->VaxPropPopRTargetted
  
@@ -384,13 +381,15 @@ RibbonsVIVT |>
 
 ```
 
+## Figure 3
+
 ```{r}
 # parallelising. 
 
 library(purrr)
 library(furrr)
 
-plan(multisession, workers = 10)
+plan(multisession, workers = 8)
 options = furrr_options(seed=TRUE)
 
 expand_grid(VI = c(0.0,0.1,0.4,0.90,0.99),VT = c(0.0,0.1,0.4,0.7,0.90,0.99)) |> 
@@ -401,7 +400,13 @@ RibbonsVIVT |>
   ggplot(aes(x = ProportionVaccinated))+
   geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4) +
   geom_hline(yintercept = 1)+
-  facet_grid(VI~VT,labeller = 'label_both')
+  facet_grid(VI~VT,labeller = 'label_both')+
+  theme_bw() + 
+  theme(legend.position="none",strip.background = element_rect(
+    color="black", fill=c("lightgray"), size=1, linetype="solid"),
+    strip.text.y = element_text(size = 10))
+
+
 
 ```
 
