@@ -14,7 +14,7 @@ library(boot)
 library(cowplot)
 
 natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
-#natsal = read.delim("~/OneDrive - University of Bristol/Shared Documents/MPox/UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
+natsal = read.delim("~/OneDrive - University of Bristol/Shared Documents/MPox/UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 natsal %>%
   select(sin2,total_wt,dage,hhsize,het1yr,sam1yr,sam5yrs) -> RRdata
 
@@ -201,14 +201,14 @@ CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
 CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
 {
   #if(!is.null(probvac1)){MSM$probvac=probvac1}
-  
+  print(probvac1)
   MSM %>%
     mutate(probvac = probvac1) %>%
     mutate(degree = sam1yr + het1yr + hhsize) %>%
     mutate(degreedenom = sum(total_wt*degree)) %>%
     mutate(ci = total_wt*degree/degreedenom) %>%
-    mutate(wi_vac = probvac*total_wt) %>%
-    mutate(wi_unvac = (1-probvac)*total_wt) %>%
+    mutate(wi_vac = probvac) %>%
+    mutate(wi_unvac = (1-probvac)) %>%
     
     mutate(wi_vac = probvac) %>%
     mutate(wi_unvac = (1-probvac)) %>%
@@ -266,10 +266,15 @@ CalcPopRvacRandom <- function(contacts,
                               VT,
                               bootRepeats = 1000) 
 {
-  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+  
+  MSM = CalculateIndR(contacts, 
+                      probvac1= (1- exp(-probvac)), 
+                      VI = VI, VT = VT)
   tmp = CalcRvac(MSM)
   return(tmp)
 }
+
+
 
 CalcPopRvacTargetted <- function(contacts=MSM, 
                                  PropVac, 
@@ -277,19 +282,23 @@ CalcPopRvacTargetted <- function(contacts=MSM,
                                  VT,
                                  bootRepeats = 1000) 
 {
-  #contacts = MSM
-#  PropVac = 0.9
+
+  targetvac = rep(1-exp(-PropVac^(contacts$totalcontacts^0.5)),length.out=length(contacts$totalcontacts))
+
+  numbervaccinated = sum(targetvac*contacts$total_wt)
   N=sum(contacts$total_wt) #total number of people (we want i/100 to be vaccinated)
   num2vac = N*PropVac
-  O1=order(contacts$totalcontacts,decreasing = TRUE)
-  CS1=cumsum(contacts$total_wt[O1])
-  Vthreshold = min(which(CS1>=num2vac))
-  probvac=rep(0,length(O1))
-  probvac[O1[1:Vthreshold]] = 1 
+  probvac = targetvac * num2vac/numbervaccinated
   
-  #contacts$targetprob <- probvac1
-#  VT = 0.99
-#  VT = 0.4
+  #O1=order(contacts$totalcontacts,decreasing = TRUE)
+  #CS1=cumsum(contacts$total_wt[O1])
+  #Vthreshold = min(which(CS1>=num2vac))
+  #probvac=rep(0,length(O1))
+  #probvac[O1[1:Vthreshold]] = 1 
+
+  
+  
+    
   MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
   tmp = CalcRvac(MSM)
   return(tmp)
@@ -364,7 +373,7 @@ VIVTLoop |>
 ```
 
 ```{r}
-# without parallelising
+# without parallelising for testing (AVOID)
 #expand_grid(VI = seq(0.0,1,0.2),VT = seq(0.0,1,0.2))
 
 expand_grid(VI = c(0.0,0.1,0.4,0.7,0.9,1),VT = c(0.0,0.1,0.4,0.7,0.9,1)) |> 
@@ -389,12 +398,12 @@ RibbonsVIVT |>
 library(purrr)
 library(furrr)
 
-plan(multisession, workers = 8)
+plan(multisession, workers = 10)
 options = furrr_options(seed=TRUE)
 
 expand_grid(VI = c(0.0,0.1,0.4,0.90,0.99),VT = c(0.0,0.1,0.4,0.7,0.90,0.99)) |> 
   mutate(tmp = future_map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y),.options = options)) |> 
-  unnest() ->RibbonsVIVT
+  unnest(cols = c(tmp)) ->RibbonsVIVT
 
 RibbonsVIVT |> 
   ggplot(aes(x = ProportionVaccinated))+
