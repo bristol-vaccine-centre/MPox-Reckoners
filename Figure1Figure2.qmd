@@ -201,7 +201,7 @@ CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
 CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
 {
   #if(!is.null(probvac1)){MSM$probvac=probvac1}
-  print(probvac1)
+  #print(probvac1)
   MSM %>%
     mutate(probvac = probvac1) %>%
     mutate(degree = sam1yr + het1yr + hhsize) %>%
@@ -268,7 +268,7 @@ CalcPopRvacRandom <- function(contacts,
 {
   
   MSM = CalculateIndR(contacts, 
-                      probvac1= (1- exp(-probvac)), 
+                      probvac1=probvac-5/100, 
                       VI = VI, VT = VT)
   tmp = CalcRvac(MSM)
   return(tmp)
@@ -283,20 +283,28 @@ CalcPopRvacTargetted <- function(contacts=MSM,
                                  bootRepeats = 1000) 
 {
 
-  targetvac = rep(1-exp(-PropVac^(contacts$totalcontacts^0.5)),length.out=length(contacts$totalcontacts))
+  #targetvac = rep(1-exp(-PropVac^(contacts$totalcontacts^0.5)),length.out=length(contacts$totalcontacts))
 
-  numbervaccinated = sum(targetvac*contacts$total_wt)
+  #numbervaccinated = sum(targetvac*contacts$total_wt)
   N=sum(contacts$total_wt) #total number of people (we want i/100 to be vaccinated)
   num2vac = N*PropVac
-  probvac = targetvac * num2vac/numbervaccinated
-  
-  #O1=order(contacts$totalcontacts,decreasing = TRUE)
-  #CS1=cumsum(contacts$total_wt[O1])
-  #Vthreshold = min(which(CS1>=num2vac))
-  #probvac=rep(0,length(O1))
-  #probvac[O1[1:Vthreshold]] = 1 
 
-  
+  n2v=num2vac
+  probvac2 = rep(0,length(MSM$total_wt))
+  while(n2v>1)
+  {
+    targetvac = (MSM$totalcontacts*MSM$total_wt)
+    targetvac[which(probvac2>=1)]=0
+    who = rmultinom(1,size=n2v,prob=targetvac)
+    probvac3 = who/MSM$total_wt
+    probvac3[is.na(probvac3)]=0
+    probvac3[probvac3>1]=1
+    numbervaccinated = sum(probvac3*MSM$total_wt)
+    n2v = n2v - numbervaccinated
+    probvac2 = apply(cbind(probvac2,probvac3),MARGIN=1,FUN=max)
+  }
+  numremaining=num2vac-n2v
+  probvac <- probvac2
   
     
   MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
@@ -317,15 +325,15 @@ VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = 0.8, VT = 0.8))) |> 
-  unnest(tmp) |> 
-  mutate(Type = "Random")->VaxPropPopRRandom
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = 0.8, VT = 0.8)))|> 
+  unnest(cols = c(tmp)) |> 
+  mutate(Type = "Non-targeted")->VaxPropPopRRandom
   
 
 VaxPropDF|>
   mutate(tmp =  map(ProportionVaccinated/100,
                     ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM,VI = 0.8, VT = 0.8))) |> 
-  unnest(tmp) |> 
+  unnest(cols = c(tmp)) |> 
   mutate(Type = "Targetted")->VaxPropPopRTargetted
  
 bind_rows(VaxPropPopRRandom,VaxPropPopRTargetted)|> 
@@ -341,21 +349,24 @@ So that works for individual VI, VT. Now to write wrapper functions around VI an
 ```{r}
 
 GenerateRibbonsVInfectionVTransmission <- function(VI, VT){
-  VaxPropDF = as_tibble(seq(0,100,1))|>rename(ProportionVaccinated = value)
+  VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
                     ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
-    unnest(tmp) |> 
-    mutate(Type = "Random") |> 
-    mutate(VI = VI,VT = VT)->VaxPropPopRRandom
+    unnest(cols = c(tmp)) |> 
+    mutate(Type = "Non-targeted") ->VaxPropPopRRandom 
+  
+  #|> 
+  #  mutate(VI = VI,VT = VT)->VaxPropPopRRandom
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
                     ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
-    unnest(tmp) |> 
-    mutate(Type = "Targetted") |> 
-    mutate(VI = VI, VT = VT)->VaxPropPopRTargetted
+    unnest(cols = c(tmp)) |> 
+    mutate(Type = "Targeted") ->VaxPropPopRTargetted
+    #|> 
+    #mutate(VI = VI, VT = VT)->VaxPropPopRTargetted
  
   return(bind_rows(VaxPropPopRRandom,VaxPropPopRTargetted))
 }
@@ -376,11 +387,13 @@ VIVTLoop |>
 # without parallelising for testing (AVOID)
 #expand_grid(VI = seq(0.0,1,0.2),VT = seq(0.0,1,0.2))
 
-expand_grid(VI = c(0.0,0.1,0.4,0.7,0.9,1),VT = c(0.0,0.1,0.4,0.7,0.9,1)) |> 
-  mutate(tmp = map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y))) |> 
-  unnest() ->RibbonsVIVT
+#expand_grid(VI = c(0.0,0.1,0.4,0.7,0.9,1),VT = c(0.0,0.1,0.4,0.7,0.9,1)) |> 
+#  mutate(tmp = map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y))) |> 
+#  unnest() ->RibbonsVIVT
 
-
+expand_grid(VI = c(0.1,0.4),VT = c(0.1,0.4)) |> 
+  mutate(tmp = map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y))) |>
+  unnest(cols = c(tmp)) ->RibbonsVIVT
 
 RibbonsVIVT |> 
   ggplot(aes(x = ProportionVaccinated))+
@@ -398,22 +411,25 @@ RibbonsVIVT |>
 library(purrr)
 library(furrr)
 
-plan(multisession, workers = 10)
+plan(multisession, workers = 12)
 options = furrr_options(seed=TRUE)
+VESweep = c(0,0.2,0.5,0.8,0.95)
 
-expand_grid(VI = c(0.0,0.1,0.4,0.90,0.99),VT = c(0.0,0.1,0.4,0.7,0.90,0.99)) |> 
+expand_grid(VI = VESweep,VT = VESweep) |> 
   mutate(tmp = future_map2(VI,VT,~GenerateRibbonsVInfectionVTransmission(.x,.y),.options = options)) |> 
   unnest(cols = c(tmp)) ->RibbonsVIVT
 
 RibbonsVIVT |> 
   ggplot(aes(x = ProportionVaccinated))+
   geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4) +
-  geom_hline(yintercept = 1)+
+  geom_hline(yintercept = 1,linewidth = 0.6)+
   facet_grid(VI~VT,labeller = 'label_both')+
   theme_bw() + 
   theme(legend.position="none",strip.background = element_rect(
-    color="black", fill=c("lightgray"), size=1, linetype="solid"),
-    strip.text.y = element_text(size = 10))
+    color="black", fill=c("lightgray"), linewidth=0.4, linetype="solid"),
+    strip.text.y = element_text(size = 10))+
+  xlab('Vaccine Coverage (%)')+
+  ylab('Reproduction Number')
 
 
 
