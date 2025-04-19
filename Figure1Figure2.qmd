@@ -363,11 +363,11 @@ So that works for individual VI, VT. Now to write wrapper functions around VI an
 ```{r}
 # set VI VT to default to 0.8
 GenerateRibbonsVInfectionVTransmission <- function(VI=0.8, VT=0.8, HouseholdSAR = 0.12){
-  VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
+  VaxPropDF = as_tibble(seq(0,100,2))|>rename(ProportionVaccinated = value)
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = 0.12))) |> 
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = HouseholdSAR))) |> 
     unnest(cols = c(tmp)) |> 
     mutate(Type = "Non-targeted") ->VaxPropPopRRandom 
   
@@ -376,7 +376,7 @@ GenerateRibbonsVInfectionVTransmission <- function(VI=0.8, VT=0.8, HouseholdSAR 
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = 0.12))) |> 
+                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = HouseholdSAR))) |> 
     unnest(cols = c(tmp)) |> 
     mutate(Type = "Targeted") ->VaxPropPopRTargetted
     #|> 
@@ -436,7 +436,7 @@ expand_grid(VI = VESweep,VT = VESweep) |>
 RibbonsVIVT |> 
   ggplot(aes(x = ProportionVaccinated))+
   geom_ribbon(aes(ymin = Lower, ymax = Upper,colour = Type,fill = Type), alpha = 0.4) +
-  geom_hline(yintercept = 1,linewidth = 0.6)+
+  geom_hline(yintercept = 1,linewidth = 0.6, linetype = 'dotted')+
   facet_grid(VI~VT,labeller = 'label_both')+
   theme_bw() + 
   theme(legend.position="none",strip.background = element_rect(
@@ -454,25 +454,31 @@ RibbonsVIVT |>
 ```{r}
 
 
-ExtractVaxBands = function(dataDF = RMSMCIIb.df){ 
-  dataDF |> 
-    slice_min(abs(1-Mean),n=3, by = 'Type') %>% # extract R closest to 1
-    select(ProportionVaccinated,Type) %>% 
-    group_by(Type) %>% 
-    mutate(Lower=min(ProportionVaccinated),Upper=max(ProportionVaccinated)) %>% 
-    filter(ProportionVaccinated == median(ProportionVaccinated))->VaxBands
-  return(VaxBands)
+ExtractVaxBands2 <- function(data = CladeIIb.df){
+  data |> 
+    select(ProportionVaccinated,Upper,Type) |> 
+    slice_min(abs(1-Upper),n=1, by = 'Type') ->Upper
+    # find the value of ProportionVaccinated where Upper crosses 1
+  data |> 
+    select(ProportionVaccinated,Lower,Type) |> 
+    slice_min(abs(1-Lower),n=1, by = 'Type') ->Lower  
+  
+  left_join(Upper,Lower,by = 'Type') |> 
+    select(Type, Upper = ProportionVaccinated.x,Lower = ProportionVaccinated.y)->tmp
+  return(tmp |> mutate(ProportionVaccinated = 0))
 }
+  
+
 
 GGPlotVaxRibbons = function(dataDF = RMSMCIIb.df){
-  VaxBands = ExtractVaxBands(dataDF)
+  VaxBands = ExtractVaxBands2(dataDF)
   dataDF|>
     ggplot(aes(x=ProportionVaccinated,ymin = Lower,ymax=Upper,fill=Type))+
     geom_ribbon(alpha = 0.4) +
     geom_hline(yintercept=1,linetype='dotted')+
-    geom_rect(data=VaxBands %>% filter(Type=='Random'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf), colour = 'grey',alpha=0.1)+
-    geom_rect(data=VaxBands %>% filter(Type=='Targetted'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf),colour = 'grey',alpha=0.1)+
-    ylab('R in individuals with same sex partnerships')+
+    geom_rect(data=VaxBands %>% filter(Type=='Non-targeted'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf), colour = 'grey',alpha=0.1)+
+    geom_rect(data=VaxBands %>% filter(Type=='Targeted'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf),colour = 'grey',alpha=0.1)+
+    ylab('Reproduction number')+
     xlab('% Vaccinated')+
     theme_bw()->p
   p
@@ -489,9 +495,10 @@ GGPlotVaxRibbons = function(dataDF = RMSMCIIb.df){
 ```{r}
 
 library(patchwork)
-CladeIIb.df = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013)
 
-CladeIb.df = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013 * 10)
+CladeIIb = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013)
+
+CladeIb = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013 * 10)
 
 CladeI20 = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.2)
 
@@ -501,5 +508,99 @@ CladeIb50 = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.5)
 
 
 
+GGPlotVaxRibbons(CladeIIb.df) -> Clade2Plot
 
+GGPlotVaxRibbons(CladeIb) -> CladeIbPlot
+
+GGPlotVaxRibbons(CladeI20) -> CladeIb20Plot
+
+GGPlotVaxRibbons(CladeI40) -> CladeIb40Plot
+  
+GGPlotVaxRibbons(CladeIb50) -> CladeIb50Plot
+
+
+Clade2Plot + ggtitle('Clade IIb') -> p1
+CladeIbPlot + ggtitle('Clade Ib = Household SAR = 13%') -> p2
+CladeIb20Plot + ggtitle('Clade Ib Household SAR = 20%') -> p3
+CladeIb40Plot + ggtitle('Clade Ib Household SAR = 40%') -> p4
+
+CladeIb50Plot + ggtitle('Clade Ib Household SAR = 50%') -> p5
+
+
+p1+theme(legend.position = "none")+ylim(0,2.25)+
+p2+theme(legend.position = "none")+ylim(0,2.25)+
+p3+theme(legend.position = "none")+ylim(0,2.25)+
+p4+theme(legend.position = "none")+ylim(0,2.25)+
+p5+ylim(0,2.25)
+
+
+```
+
+```{r}
+HHSAR = dplyr::as_tibble(c(0.013,0.13,0.2,0.4,0.5))|>rename(HouseholdSAR = value)
+
+plan(multisession, workers = 12)
+options = furrr_options(seed=TRUE)
+
+HHSAR|>
+  mutate(tmp = future_map(HouseholdSAR,
+                          ~GenerateRibbonsVInfectionVTransmission(HouseholdSAR = .x),
+                          .options = options)) |>
+    unnest(tmp)-> RibbonPlotData
+
+HHSAR|>
+  mutate(tmp = future_map(HouseholdSAR,
+                          ~GenerateRibbonsVInfectionVTransmission(HouseholdSAR = .x)|>ExtractVaxBands(),
+                          .options = options)) |>
+    unnest(tmp)-> RibbonPlotDataVaxBoxes
+
+
+
+RibbonPlotData |>
+  #unnest(tmp) %>% 
+  ggplot(aes(x=ProportionVaccinated))+
+  geom_ribbon(aes(ymin = Lower,ymax=Upper,fill=Type),alpha = 0.4)+   
+  geom_hline(yintercept=1,linetype='dotted')+
+  geom_rect(data=RibbonPlotDataVaxBoxes |> filter(Type=='Random'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf,fill=Type), colour = 'grey',alpha=0.1)+
+  geom_rect(data=RibbonPlotDataVaxBoxes |> filter(Type=='Targetted'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf,fill=Type),colour = 'grey',alpha=0.1)+
+  facet_grid(.~HouseholdSAR,labeller = 'label_both')+
+  xlab('Proportion Vaccinated (%)')+
+  ylab('Population Reproduction Number')+
+  theme_bw()->panel_plots
+
+panel_plots
+```
+
+```{r}
+HHSAR = as_tibble(seq(0.0,0.5,0.02))|>rename(HouseholdSAR = value)
+
+HHSAR|>
+  mutate(tmp = future_map(HouseholdSAR, 
+                          ~GenerateRibbonsVInfectionVTransmission(HouseholdSAR = .x)|>
+                            ExtractVaxBands2(),
+                          .options = options,
+                          .progress = TRUE)) |>
+    unnest(tmp)-> VaxPlotData
+```
+
+```{r}
+VaxPlotData |>
+  ggplot(aes(x=HouseholdSAR,ymin=Lower,ymax=Upper,fill=Type))+
+  geom_ribbon(alpha=0.4,colour='grey')+
+  theme_bw()+
+  xlab('Household SAR')+
+  ylab('Vaccination Threshold (%)') -> threshold_plot
+
+threshold_plot
+```
+
+```{r}
+panel_plots / threshold_plot & theme(axis.title = element_text(size = 10)) ->combined_plot
+
+combined_plot
+
+A = 6
+GoldenRatio = (1+sqrt(5))/2
+
+ggsave(plot = combined_plot,filename = 'VaxThresholdPlot.png',device = 'png',width = A*GoldenRatio,height = A)
 ```
