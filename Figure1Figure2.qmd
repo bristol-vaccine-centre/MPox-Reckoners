@@ -13,7 +13,7 @@ library(tidyverse)
 library(boot)
 library(cowplot)
 
-natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
+#natsal=read.delim("../UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 natsal = read.delim("~/OneDrive - University of Bristol/Shared Documents/MPox/UKDA-7799-tab/tab/eul_natsal_2010_for_archive.tab")
 natsal %>%
   select(sin2,total_wt,dage,hhsize,het1yr,sam1yr,sam5yrs) -> RRdata
@@ -198,10 +198,17 @@ CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
   return(tmp)
 }
 
-CalculateIndR <- function(MSM,probvac1=0.0,VI=0.0,VT=0.0)
+CalculateIndR <- function(MSM,
+                          probvac1=0.0,
+                          VI=0.0,
+                          VT=0.0,
+                          SameSexSAR = 0.12,
+                          HeteroSAR = 0.12,
+                          HouseholdSAR = 0.12)
 {
   #if(!is.null(probvac1)){MSM$probvac=probvac1}
   #print(probvac1)
+  attackrate = c(SameSexSAR,HeteroSAR,HouseholdSAR) 
   MSM %>%
     mutate(probvac = probvac1) %>%
     mutate(degree = sam1yr + het1yr + hhsize) %>%
@@ -264,12 +271,15 @@ CalcPopRvacRandom <- function(contacts,
                               probvac, 
                               VI, 
                               VT,
-                              bootRepeats = 1000) 
+                              SameSexSAR = 0.12,
+                              HeteroSAR = 0.12,
+                              HouseholdSAR = 0.12
+                              ) 
 {
   
   MSM = CalculateIndR(contacts, 
                       probvac1=probvac-5/100, 
-                      VI = VI, VT = VT)
+                      VI = VI, VT = VT, HouseholdSAR = HouseholdSAR)
   tmp = CalcRvac(MSM)
   return(tmp)
 }
@@ -280,7 +290,9 @@ CalcPopRvacTargetted <- function(contacts=MSM,
                                  PropVac, 
                                  VI, 
                                  VT,
-                                 bootRepeats = 1000) 
+                                 SameSexSAR = 0.12,
+                                 HeteroSAR = 0.12,
+                                 HouseholdSAR = 0.12) 
 {
 
   #targetvac = rep(1-exp(-PropVac^(contacts$totalcontacts^0.5)),length.out=length(contacts$totalcontacts))
@@ -307,11 +319,14 @@ CalcPopRvacTargetted <- function(contacts=MSM,
   probvac <- probvac2
   
     
-  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT)
+  MSM = CalculateIndR(contacts, probvac1=probvac, VI = VI, VT = VT, 
+                      HouseholdSAR = HouseholdSAR)
   tmp = CalcRvac(MSM)
   return(tmp)
 }
+```
 
+```{r}
 
 #deltaX = seq(100,0,-5)
 #RpopMSM_target=matrix(NA,nrow=length(deltaX),ncol=3)
@@ -319,7 +334,6 @@ CalcPopRvacTargetted <- function(contacts=MSM,
 
 #j=1
 #for(i in deltaX)# loop over proportion vaccinated
-
   
 VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
 
@@ -347,13 +361,13 @@ bind_rows(VaxPropPopRRandom,VaxPropPopRTargetted)|>
 So that works for individual VI, VT. Now to write wrapper functions around VI and VT.
 
 ```{r}
-
-GenerateRibbonsVInfectionVTransmission <- function(VI, VT){
+# set VI VT to default to 0.8
+GenerateRibbonsVInfectionVTransmission <- function(VI=0.8, VT=0.8, HouseholdSAR = 0.12){
   VaxPropDF = as_tibble(seq(0,100,5))|>rename(ProportionVaccinated = value)
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
+                    ~CalcPopRvacRandom(probvac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = 0.12))) |> 
     unnest(cols = c(tmp)) |> 
     mutate(Type = "Non-targeted") ->VaxPropPopRRandom 
   
@@ -362,7 +376,7 @@ GenerateRibbonsVInfectionVTransmission <- function(VI, VT){
   
   VaxPropDF|>
     mutate(tmp =  map(ProportionVaccinated/100,
-                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT))) |> 
+                    ~CalcPopRvacTargetted(PropVac=.x,contacts = MSM, VI = VI, VT = VT, HouseholdSAR = 0.12))) |> 
     unnest(cols = c(tmp)) |> 
     mutate(Type = "Targeted") ->VaxPropPopRTargetted
     #|> 
@@ -435,6 +449,57 @@ RibbonsVIVT |>
 
 ```
 
+## Figure 2
+
 ```{r}
+
+
+ExtractVaxBands = function(dataDF = RMSMCIIb.df){ 
+  dataDF |> 
+    slice_min(abs(1-Mean),n=3, by = 'Type') %>% # extract R closest to 1
+    select(ProportionVaccinated,Type) %>% 
+    group_by(Type) %>% 
+    mutate(Lower=min(ProportionVaccinated),Upper=max(ProportionVaccinated)) %>% 
+    filter(ProportionVaccinated == median(ProportionVaccinated))->VaxBands
+  return(VaxBands)
+}
+
+GGPlotVaxRibbons = function(dataDF = RMSMCIIb.df){
+  VaxBands = ExtractVaxBands(dataDF)
+  dataDF|>
+    ggplot(aes(x=ProportionVaccinated,ymin = Lower,ymax=Upper,fill=Type))+
+    geom_ribbon(alpha = 0.4) +
+    geom_hline(yintercept=1,linetype='dotted')+
+    geom_rect(data=VaxBands %>% filter(Type=='Random'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf), colour = 'grey',alpha=0.1)+
+    geom_rect(data=VaxBands %>% filter(Type=='Targetted'),aes(xmin=Lower,xmax=Upper,ymin=0,ymax=Inf),colour = 'grey',alpha=0.1)+
+    ylab('R in individuals with same sex partnerships')+
+    xlab('% Vaccinated')+
+    theme_bw()->p
+  p
+  return(p)
+}
+
+
+
+
+
+
+```
+
+```{r}
+
+library(patchwork)
+CladeIIb.df = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013)
+
+CladeIb.df = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.013 * 10)
+
+CladeI20 = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.2)
+
+CladeI40 = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.4)
+
+CladeIb50 = GenerateRibbonsVInfectionVTransmission(HouseholdSAR = 0.5)
+
+
+
 
 ```
