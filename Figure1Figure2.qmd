@@ -181,22 +181,22 @@ attackrate = c(0.12,0.12,0.12) #from Packer et al; with household attack rate up
 VI = 0.3 # testing
 VT = 0.0
 
-CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
-{
-  contacts |> 
-    mutate(probvac = probvac1) |> 
-    mutate(Rvac = (1-VT)*( (1-probvac) + probvac*(1-VI))*
-                          (attackrate[1]*sam1yr + 
-                           attackrate[2]*het1yr + 
-                           attackrate[3]*hhsize)) |> 
-    mutate(Runvac = ((1-probvac) + probvac*(1-VI))*
-                      (attackrate[1]*sam1yr + 
-                       attackrate[2]*het1yr + 
-                       attackrate[3]*hhsize)) |> 
-    mutate(indR = probvac*Rvac + (1-probvac)*Runvac) |> 
-    mutate(indRsquared = probvac*Rvac*Rvac + (1-probvac)*Runvac*Runvac) -> tmp
-  return(tmp)
-}
+# CalculateIndR_old <- function(contacts = MSM,probvac1=0.0, VI = 0.3, VT = 0.0)
+# {
+#   contacts |> 
+#     mutate(probvac = probvac1) |> 
+#     mutate(Rvac = (1-VT)*( (1-probvac) + probvac*(1-VI))*
+#                           (attackrate[1]*sam1yr + 
+#                            attackrate[2]*het1yr + 
+#                            attackrate[3]*hhsize)) |> 
+#     mutate(Runvac = ((1-probvac) + probvac*(1-VI))*
+#                       (attackrate[1]*sam1yr + 
+#                        attackrate[2]*het1yr + 
+#                        attackrate[3]*hhsize)) |> 
+#     mutate(indR = probvac*Rvac + (1-probvac)*Runvac) |> 
+#     mutate(indRsquared = probvac*Rvac*Rvac + (1-probvac)*Runvac*Runvac) -> tmp
+#   return(tmp)
+# }
 
 CalculateIndR <- function(MSM,
                           probvac1=0.0,
