@@ -9,13 +9,15 @@ A ready‑reckoner modelling tool developed to characterise mpox Clade Ib tran
 - There is a minimal impact of increasing household SAR on the overall reproduction number, due to the structure of the sexual contact network and its coincidence with household structure in England.
 
 This is designed as a rapid, network-informed modelling tool to inform strategic outbreak response. This version is calibrated to mpox Clade Ib in England, however the framework is flexible and can be adapted to:
-- Other geographical settings (via local contact survey data).
-- Other pathogens with analogous contact structure.
+- Other geographical settings informed by local contact survey data.
+- Other pathogens with analogous contact types relevant to pathogen-specific transmission routes.
 - Updated assumptions on vaccine effectiveness or transmission.
 
 **Repository Contents**
 
 Data sources:
+
+
 
 Code: 
 
