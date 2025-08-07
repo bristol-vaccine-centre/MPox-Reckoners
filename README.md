@@ -16,7 +16,18 @@ This is designed as a rapid, network-informed modelling tool to inform strategic
 **Repository Contents**
 
 Data sources:
+National Survey of Sexual Attitudes and Lifestyles, 2010-2012
+NATSAL III; Natsal-3
+	
+Johnson, A., University College London
+Mercer, C., University College London
+Sonnenberg, P., University College London
+Copas, A., University College London
+Wellings, K., London School of Hygiene and Tropical Medicine
+Macdowall, W., London School of Hygiene and Tropical Medicine
+Erens, B., National Centre for Social Research
 
+https://doi.org/10.5255/UKDA-SN-7799-2
 
 
 Code: 
