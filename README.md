@@ -1,8 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: sentence
----
 
 **MPox-Reckoners: Ready‑Reckoner Modelling Framework for MPox Clade Ib**
 
